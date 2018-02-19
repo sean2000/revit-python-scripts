@@ -1,10 +1,13 @@
 import os
 import re
 from contextlib import contextmanager
+import tempfile
 
 import clr
 clr.AddReference('RevitAPI')
 clr.AddReference('RevitAPIUI')
+clr.AddReference("System.Windows.Forms")
+
 import System
 from Autodesk.Revit.DB import BuiltInCategory
 from Autodesk.Revit.DB import BuiltInParameter
@@ -21,6 +24,21 @@ from Autodesk.Revit.DB import View
 from Autodesk.Revit.DB import ViewFamilyType
 from Autodesk.Revit.DB import ViewSheet
 from Autodesk.Revit.DB import ViewType
+
+from System.Windows.Forms import FolderBrowserDialog
+from System.Windows.Forms import DialogResult
+
+
+def get_temp_path(filename):
+    return os.path.join(tempfile.gettempdir(), filename)
+
+
+def get_folder(prompt):
+    dlg = FolderBrowserDialog()
+    dlg.Description = prompt
+    res = dlg.ShowDialog()
+    if res == DialogResult.OK:
+        return dlg.SelectedPath
 
 
 def load_assembly(path):

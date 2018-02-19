@@ -1,26 +1,41 @@
+"""Functions related to export dwg files, images etc."""
+
 from api import *
+from lib import Walker
+from lib import get_folder
+
+from Autodesk.Revit.DB import ExportRange
+from Autodesk.Revit.DB import FilteredElementCollector
+from Autodesk.Revit.DB import FitDirectionType
+from Autodesk.Revit.DB import ImageExportOptions
+from Autodesk.Revit.DB import ImageFileType
+from Autodesk.Revit.DB import ImageResolution
+from Autodesk.Revit.DB import View3D
+from Autodesk.Revit.DB import ViewFamily
+from Autodesk.Revit.DB import ViewFamilyType
+from Autodesk.Revit.DB import ZoomFitType
 
 
-def export_view_image(doc):
-    out_dir = 'c:\\Users\\DodswoS'
+def export_images(doc):
+    """Export 3D images from all revit family files found under starting directory"""
+    start_dir = get_folder('Enter start directory: ')
+    out_dir = get_folder('Enter directory to save images: ')
     last_doc = None
 
     def cb(filepath):
         current_uidoc = __revit__.OpenAndActivateDocument(filepath)
         current_doc = current_uidoc.Document
-        #if last_doc:
-        #    last_doc.Close(False)
-        #    print 'Closing {}'.format(last_doc)
-
+        if last_doc:
+            last_doc.Close(False)
+            print('Closing {}'.format(last_doc))
         last_doc = current_doc
 
         current_dir, filename = os.path.split(current_doc.PathName)
         basename, ext = os.path.splitext(filename)
 
         view_type = [x for x in
-                     FilteredElementCollector(current_doc).OfClass(ViewFamilyType)
-                     if x.ViewFamily == ViewFamily.ThreeDimensional][0]
-
+            FilteredElementCollector(current_doc).OfClass(ViewFamilyType)
+            if x.ViewFamily == ViewFamily.ThreeDimensional][0]
 
         img = ImageExportOptions()
         img.FilePath = os.path.join(out_dir, '{}.png'.format(basename))
@@ -32,16 +47,15 @@ def export_view_image(doc):
 
         cats = current_doc.Settings.Categories
         view = current_doc.ActiveView
-        with transaction(current_doc, 'Change view settings'):
-            view = View3D.CreateIsometric(current_doc, view_type.Id)
-            current_uidoc.ActiveView = view
-            #view.SetVisibility(cats.get_Item(BuiltInCategory.OST_Dimensions), False)
-            #view.SetVisibility(cats.get_Item(BuiltInCategory.OST_TextNotes), False)
-            current_doc.ExportImage(img)
-        print basename
+        tr = transaction(current_doc, 'Change view settings')
+        tr.Start()
+        view = View3D.CreateIsometric(current_doc, view_type.Id)
+        current_uidoc.ActiveView = view
+        current_doc.ExportImage(img)
+        tr.RollBack()
 
-    w = Walker(r'C:\Users\DodswoS\NBIF', '.*.rfa', cb)
+        print(basename)
+
+    w = Walker(start_dir, '.*.rfa', cb)
     w.run()
-
-
 

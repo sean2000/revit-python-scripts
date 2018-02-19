@@ -1,24 +1,46 @@
 from collections import defaultdict
 import csv
 import os
-import shutil
 
 from Autodesk.Revit.DB import BuiltInParameter
 from Autodesk.Revit.DB import BuiltInCategory
-from Autodesk.Revit.DB import ElementTypeGroup
 from Autodesk.Revit.DB import Family
 from Autodesk.Revit.DB import FamilyInstance
 from Autodesk.Revit.DB import FamilySymbol
 from Autodesk.Revit.DB import FilteredElementCollector
-from Autodesk.Revit.DB import Level
-from Autodesk.Revit.DB import LinePatternElement
-from Autodesk.Revit.DB import TextNote
-from Autodesk.Revit.DB import ViewSheet
-from Autodesk.Revit.DB import XYZ
 
 from api import *
 from lib import transaction
+from lib import get_temp_path
 import constants
+
+
+def report_corrupt_families(doc):
+    """Generate CSV of all loaded families and their corrupted status"""
+    families = FilteredElementCollector(doc).OfClass(Family)
+    rows = []
+    category = raw_input('Enter category: ').strip()
+
+    for family in families:
+        if not family.IsEditable or family.IsInPlace:
+            continue
+        if category and family.FamilyCategory.Name != category:
+            continue
+        try:
+            fam_doc = doc.EditFamily(family)
+            fam_doc.Close(False)
+            rows.append((family.FamilyCategory.Name, family.Name, True))
+            print('{} - OK'.format(family.Name))
+        except Exception:
+            print('{} - Corrupt'.format(family.Name))
+            rows.append((family.FamilyCategory.Name, family.Name, False))
+
+    csv_path = get_temp_path('corrupt.csv')
+    with open(csv_path, 'w') as f:
+        w = csv.writer(f, lineterminator='\n')
+        w.writerow(('Category', 'Family', 'OK'))
+        w.writerows(rows)
+    os.startfile(csv_path, 'open')
 
 
 def fix_duplicate_marks(doc):
@@ -85,6 +107,31 @@ def rename_families(doc):
             name = ' '.join(out)
             fam.Name = '{} - {}'.format(code, name)
             print(fam.Name)
+
+
+def report_family_types(doc):
+    """Generate CSV report of types and parameters of family"""
+    fm = doc.FamilyManager
+
+    types = []
+    fieldnames = {'Type'}
+    for ft in fm.Types:
+        ft_dict = {'Type': ft.Name}
+        for p in fm.GetParameters():
+            p_value = ft.AsValueString(p) or ft.AsString(p)
+            if not p_value:
+                continue
+            ft_dict[p.Definition.Name] = p_value
+            fieldnames.add(p.Definition.Name)
+        types.append(ft_dict)
+
+    csv_path = get_temp_path('types.csv')
+    with open(csv_path, 'w') as f:
+        dw = csv.DictWriter(f, fieldnames, lineterminator='\n')
+        dw.writeheader()
+        dw.writerows(types)
+
+    os.startfile(csv_path, 'open')
 
 
 def report_families(doc):
@@ -304,11 +351,10 @@ def fix_hfbs(doc):
                     new_val = '{}-{:06d}'.format(prefix, codenum)
                     if val != new_val:
                         hfbs_param.Set(new_val)
-                        print '{} -> {}'.format(val, new_val)
+                        print('{} -> {}'.format(val, new_val))
                 except ValueError:
                     pass
     tr.Commit()
-
 
 
 def set_door_ids(doc):
@@ -317,9 +363,8 @@ def set_door_ids(doc):
     dw = DocumentWrapper(doc)
     for door in dw.doors:
         door.LookupParameter('ElementID').Set(door.Id.IntegerValue)
-        print door.Id
+        print(door.Id)
     tr.Commit()
-
 
 
 def fix_doors(doc):
@@ -330,7 +375,7 @@ def fix_doors(doc):
                 param = door.LookupParameter("Kick_K{}_YN".format(k))
                 if param:
                     param.Set(False)
-            print get_param_value(door.get_Parameter(BuiltInParameter.ALL_MODEL_MARK), doc)
+            print(get_param_value(door.get_Parameter(BuiltInParameter.ALL_MODEL_MARK), doc))
 
 
 def swap_symbol(doc, family_name, from_type_name, to_type_name):
@@ -343,9 +388,9 @@ def swap_symbol(doc, family_name, from_type_name, to_type_name):
     with transaction(doc, "Swap symbols"):
         for instance in instances:
             if instance.GroupId.IntegerValue < 0:
-                print '{} is in group {}'.format(instance.Id, instance.GroupId)
+                print('{} is in group {}'.format(instance.Id, instance.GroupId))
             else:
-                print instance.GroupId, instance.Id
+                print(instance.GroupId, instance.Id)
                 instance.Symbol = to_symbol
 
 
@@ -366,7 +411,4 @@ def purge_unused_types(doc):
 
     print('{} symbols deleted in {} families'.format(
         count, len(matching_families)))
-
-
-
 

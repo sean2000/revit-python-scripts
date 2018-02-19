@@ -1,3 +1,49 @@
+"""Functions related to annotation."""
+from Autodesk.Revit.DB import BuiltInCategory
+from Autodesk.Revit.DB import BuiltInParameter
+from Autodesk.Revit.DB import FamilyInstance
+from Autodesk.Revit.DB import FilteredElementCollector
+from Autodesk.Revit.DB import FilteredWorksetCollector
+from Autodesk.Revit.DB import SpatialElementTag
+from Autodesk.Revit.DB import WorksetKind
+
+from lib import transaction
+
+
+def fix_room_tags(doc):
+    """Find room tags that are outside their room and move them back"""
+    room_tags = FilteredElementCollector(
+        doc
+    ).OfClass(
+        SpatialElementTag
+    ).OfCategory(
+        BuiltInCategory.OST_RoomTags
+    )
+
+    with transaction(doc, 'Move room tags'):
+        count = 0
+        for tag in room_tags:
+            room = tag.Room
+            if not room:
+                continue
+
+            box = room.get_BoundingBox(None)
+            if not box:
+                continue
+
+            tag_point = tag.Location.Point
+            tag_is_in_room = tag_point.X > box.Min.X and \
+                tag_point.X < box.Max.X and \
+                tag_point.Y > box.Min.Y and \
+                tag_point.Y < box.Max.Y
+
+            if not tag_is_in_room:
+                tag.Location.Move(room.Location.Point - tag.Location.Point)
+                count += 1
+                print(room.Level.Name, room.Number)
+
+    print('{} room tags moved'.format(count))
+
 
 def create_text_styles(doc):
 

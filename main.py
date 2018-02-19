@@ -2,10 +2,10 @@ import os
 import inspect
 import importlib
 from collections import OrderedDict
+import xml.etree.ElementTree as ET
 
-from api import DOC
+from api import DOC, APP
 
-CURDIR = r'C:\Users\DodswoS\Dropbox\work\jacobs\revit_python'
 HEADER = r'''
  ____        _   _                   ____            _       _
 |  _ \ _   _| |_| |__   ___  _ __   / ___|  ___ _ __(_)_ __ | |_ ___
@@ -16,17 +16,16 @@ HEADER = r'''
 '''
 
 
-def get_functions():
+def get_functions(start_dir):
     functions = OrderedDict()
     stop_modules = ['scratch', 'main', 'test_runner', 'api']
 
-    for mname in os.listdir(CURDIR):
+    for mname in os.listdir(start_dir):
         basename, ext = os.path.splitext(mname)
         if not ext == '.py':
             continue
         if basename in stop_modules:
             continue
-
         m = importlib.import_module(basename)
 
         for name, obj in inspect.getmembers(m):
@@ -36,6 +35,7 @@ def get_functions():
                 continue
             if not obj.__doc__:
                 continue
+
             if m not in functions:
                 functions[m] = []
             functions[m].append(obj)
@@ -43,25 +43,49 @@ def get_functions():
     return functions
 
 
+def get_index_input(prompt):
+    index = 0
+    while 1:
+        try:
+            index = int(raw_input(prompt)) - 1
+            break
+        except ValueError:
+            print('Invalid index')
+    return index
+
+
+def prettify(text):
+    return (' '.join(text.split('_'))).title()
+
+
 def ui(functions):
     print(HEADER)
 
     for i, module in enumerate(functions, 1):
-        print('{} {}'.format(i, module.__name__))
+        print('{} {}'.format(i, module.__name__.title()))
 
-    module_index = int(raw_input('\nWhich module?: ')) - 1
+    module_index = get_index_input('Which module?: ')
     module = functions.keys()[module_index]
 
+    print('')
     for i, func in enumerate(functions[module], 1):
-        print('{} {}'.format(i, func.__name__.title()))
-        print('\t' + (func.__doc__ or ''))
+        print('{} {}'.format(i, prettify(func.__name__)))
+        print('  ' + (func.__doc__.strip() or ''))
+        print('')
 
-    func_index = int(raw_input('\nWhich function?: ')) - 1
+    func_index = get_index_input('Which function?: ')
+
     func = functions[module][func_index]
+    print('')
 
     # Execute function
-    func(DOC)
+    try:
+        retval = func(DOC)
+        print('{} executed successfully'.format(prettify(func.__name__)))
+    except Exception as e:
+        print(e)
 
+    print('')
     choice = raw_input('"q" to exit or any key to continue: ')
     if choice.lower() == 'q':
         __window__.Close()
@@ -70,7 +94,22 @@ def ui(functions):
         ui(functions)
 
 
+def get_curdir():
+    curdir = None
+    xml_path = os.path.join(
+        os.environ['APPDATA'],
+        'RevitPythonShell' + APP.VersionNumber,
+        'RevitPythonShell.xml')
+    root = ET.parse(open(xml_path)).getroot()
+    for command in root.iter('Command'):
+        if command.attrib['name'] == 'Revit Scripts':
+            path = command.attrib['src']
+            curdir = os.path.dirname(path)
+    return curdir
+
+
 if __name__ == '__main__':
-    ui(get_functions())
+    curdir = get_curdir()
+    ui(get_functions(curdir))
     print('Finished')
 

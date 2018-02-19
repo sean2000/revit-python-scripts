@@ -83,9 +83,7 @@ def sheet_report(doc):
 
 
 def get_door_window_walls(doc):
-    """
-    Report all doors or windows with hosted wall types
-    """
+    """Report all doors or windows with hosted wall types"""
 
     categories = List[BuiltInCategory]()
     categories.Add(BuiltInCategory.OST_Doors)
@@ -318,4 +316,52 @@ def views_report(doc):
             for view in FilteredElementCollector(doc, sheet.Id).OfClass(View):
                 w.writerow((sheet.SheetNumber, sheet.Name, view.Name, view.ViewType))
 
+
+def element_report(doc):
+    """
+    Generate csv report of all family instances in document including workset
+    and category
+    """
+    elements = FilteredElementCollector(doc).OfClass(FamilyInstance)
+    levels = {}
+    worksets = {}
+    workset_table = doc.GetWorksetTable()
+    out = []
+
+    for element in elements:
+        if element.LevelId.IntegerValue in levels:
+            level = levels[element.LevelId.IntegerValue]
+        else:
+            if element.LevelId == ElementId.InvalidElementId:
+                level = ''
+            else:
+                level = doc.GetElement(element.LevelId).Name
+            levels[element.LevelId.IntegerValue] = level
+
+        workset_id = doc.GetWorksetId(element.Id)
+        workset = workset_table.GetWorkset(workset_id).Name
+
+        mark_param = element.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)
+        if mark_param:
+            mark = mark_param.AsString()
+        else:
+            mark = ''
+
+        try:
+            out.append((
+                element.Id.IntegerValue,
+                mark,
+                workset,
+                element.Symbol.Category.Name,
+                element.Symbol.Family.Name,
+                level
+            ))
+        except Exception as e:
+            print(e, element)
+
+    csvfile = lib.get_temp_path('element_report.csv')
+    with open(csvfile, 'w') as f:
+        w = csv.writer(f, lineterminator='\n')
+        w.writerow(('ID', 'Mark', 'Workset', 'Category', 'Family', 'Level'))
+        w.writerows(out)
 

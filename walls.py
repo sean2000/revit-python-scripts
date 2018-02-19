@@ -1,3 +1,4 @@
+"""Functions relating to walls"""
 import re
 
 from api import *

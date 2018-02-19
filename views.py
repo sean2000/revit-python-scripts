@@ -1,5 +1,6 @@
 import re
 
+from Autodesk.Revit.DB import BuiltInCategory
 from Autodesk.Revit.DB import FilteredElementCollector
 from Autodesk.Revit.DB import ParameterFilterElement
 from Autodesk.Revit.DB import Transaction
@@ -220,15 +221,6 @@ def fix_scope_boxes(doc):
     tr.Commit()
 
 
-def delete_unused_scope_boxes():
-    dw = DocumentWrapper(doc)
-    tr = Transaction(doc, 'Delete unused scope boxes')
-    tr.Start()
-    for scope_box in dw.unused_scope_boxes:
-        doc.Delete(scope_box.Id)
-    tr.Commit()
-
-
 def rename_scope_boxes(doc):
     scope_boxes = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_VolumeOfInterest)
     tr = Transaction(doc, 'Rename scope boxes')
@@ -239,4 +231,33 @@ def rename_scope_boxes(doc):
         print(new_name)
     tr.Commit()
 
+
+def delete_unused_scope_boxes(doc):
+    """Delete scope boxes that are not used in any views"""
+
+    all_views = FilteredElementCollector(doc).OfClass(View)
+    all_scope_boxes = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_VolumeOfInterest)
+    all_scope_box_ids = set(x.Id for x in all_scope_boxes)
+
+    used_scope_box_ids = set()
+    for view in all_views:
+        try:
+            used_scope_box_ids.add(
+                view.get_Parameter(
+                    BuiltInParameter.VIEWER_VOLUME_OF_INTEREST_CROP
+                ).AsElementId())
+        except:
+            pass
+
+    count = 0
+    unused_scope_box_ids = all_scope_box_ids.difference(used_scope_box_ids)
+
+    with transaction(doc, "Delete unused scope boxes"):
+        for id in unused_scope_box_ids:
+            scope_box = doc.GetElement(id)
+            print(scope_box.Name)
+            doc.Delete(id)
+            count += 1
+
+    print('{} scope boxes deleted'.format(count))
 

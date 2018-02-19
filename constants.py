@@ -1,3 +1,5 @@
+"""Constants for use by other modules"""
+
 import os
 
 MM = 25.4 * 12
